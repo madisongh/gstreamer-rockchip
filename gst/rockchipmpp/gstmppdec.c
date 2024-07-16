@@ -313,6 +313,11 @@ gst_mpp_dec_stop (GstVideoDecoder * decoder)
 
   mpp_destroy (self->mpp_ctx);
 
+  if (self->last_frame) {
+    gst_video_codec_frame_unref (self->last_frame);
+    self->last_frame = NULL;
+  }
+
   GST_DEBUG_OBJECT (self, "stopped");
 
   return TRUE;
@@ -732,6 +737,18 @@ gst_mpp_dec_get_frame (GstVideoDecoder * decoder, GstClockTime pts)
 
 out:
   if (frame) {
+    if (self->last_frame)
+      gst_video_codec_frame_unref (self->last_frame);
+
+    gst_video_codec_frame_ref (frame);
+    self->last_frame = frame;
+  } else if (self->last_frame) {
+    frame = self->last_frame;
+    GST_DEBUG_OBJECT (self, "reusing the last frame (#%d)",
+        frame->system_frame_number);
+  }
+
+  if (frame) {
     gst_video_codec_frame_ref (frame);
 
     /* Prefer using MPP PTS */
@@ -968,7 +985,8 @@ gst_mpp_dec_loop (GstVideoDecoder * decoder)
   /* HACK: Mark lockable to avoid copying in make_writable() while shared */
   GST_MINI_OBJECT_FLAG_SET (buffer, GST_MINI_OBJECT_FLAG_LOCKABLE);
 
-  frame->output_buffer = buffer;
+  gst_buffer_replace (&frame->output_buffer, buffer);
+  gst_buffer_unref (buffer);
 
   GST_DEBUG_OBJECT (self, "finish frame ts=%" GST_TIME_FORMAT,
       GST_TIME_ARGS (frame->pts));

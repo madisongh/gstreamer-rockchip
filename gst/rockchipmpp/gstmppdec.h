@@ -88,6 +88,8 @@ struct _GstMppDec
 
   guint32 decoded_frames;
 
+  GstVideoCodecFrame *last_frame;
+
   MppCodingType mpp_type;
   MppCtx mpp_ctx;
   MppApi *mpi;
