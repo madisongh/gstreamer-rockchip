@@ -1086,17 +1086,17 @@ gst_mpp_dec_handle_frame (GstVideoDecoder * decoder, GstVideoCodecFrame * frame)
 
   start_time = gst_util_get_timestamp ();
   deadline_time = start_time + MPP_INPUT_TIMEOUT_MS * GST_MSECOND;
+  GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
   while (1) {
-    GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
-    if (klass->send_mpp_packet (decoder, mpkt, interval_ms)) {
-      GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+    if (klass->send_mpp_packet (decoder, mpkt, interval_ms))
       break;
-    }
-    GST_VIDEO_DECODER_STREAM_LOCK (decoder);
 
-    if (gst_util_get_timestamp () > deadline_time)
+    if (gst_util_get_timestamp () > deadline_time) {
+      GST_VIDEO_DECODER_STREAM_LOCK (decoder);
       goto send_error;
+    }
   }
+  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
 
   /* NOTE: Sub-class takes over the MPP packet when success */
   mpkt = NULL;
