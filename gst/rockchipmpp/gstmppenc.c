@@ -115,6 +115,8 @@ static const MppFrameFormat gst_mpp_enc_formats[] = {
   MPP_FMT_YUV444P,
   MPP_FMT_RGB565LE,
   MPP_FMT_BGR565LE,
+  MPP_FMT_RGB888,
+  MPP_FMT_BGR888,
   MPP_FMT_ARGB8888,
   MPP_FMT_ABGR8888,
   MPP_FMT_RGBA8888,
