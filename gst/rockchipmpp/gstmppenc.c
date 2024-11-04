@@ -459,7 +459,10 @@ gst_mpp_enc_reset (GstVideoEncoder * encoder, gboolean drain, gboolean final)
   self->flushing = TRUE;
   self->draining = drain;
 
-  gst_mpp_enc_stop_task (encoder, drain);
+  /* HACK: The MPP is not capable of handling resets properly. */
+  self->draining = TRUE;
+
+  gst_mpp_enc_stop_task (encoder, self->draining);
 
   self->flushing = final;
   self->draining = FALSE;
