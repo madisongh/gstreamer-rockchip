@@ -56,6 +56,20 @@ G_DEFINE_ABSTRACT_TYPE (GstMppDec, gst_mpp_dec, GST_TYPE_VIDEO_DECODER);
 #define GST_MPP_DEC_UNLOCK(decoder) \
   g_mutex_unlock (GST_MPP_DEC_MUTEX (decoder));
 
+#define GST_MPP_DEC_EVENT_MUTEX(decoder) (&GST_MPP_DEC (decoder)->event_mutex)
+#define GST_MPP_DEC_EVENT_COND(decoder) (&GST_MPP_DEC (decoder)->event_cond)
+
+#define GST_MPP_DEC_BROADCAST(decoder) \
+  g_mutex_lock (GST_MPP_DEC_EVENT_MUTEX (decoder)); \
+  g_cond_broadcast (GST_MPP_DEC_EVENT_COND (decoder)); \
+  g_mutex_unlock (GST_MPP_DEC_EVENT_MUTEX (decoder));
+
+#define GST_MPP_DEC_WAIT(decoder) \
+  g_mutex_lock (GST_MPP_DEC_EVENT_MUTEX (decoder)); \
+  g_cond_wait (GST_MPP_DEC_EVENT_COND (decoder), \
+      GST_MPP_DEC_EVENT_MUTEX (decoder)); \
+  g_mutex_unlock (GST_MPP_DEC_EVENT_MUTEX (decoder));
+
 #define DEFAULT_PROP_ROTATION 0
 #define DEFAULT_PROP_WIDTH 0    /* Original */
 #define DEFAULT_PROP_HEIGHT 0   /* Original */
@@ -269,6 +283,9 @@ gst_mpp_dec_start (GstVideoDecoder * decoder)
 
   g_mutex_init (&self->mutex);
 
+  g_mutex_init (&self->event_mutex);
+  g_cond_init (&self->event_cond);
+
   GST_DEBUG_OBJECT (self, "started");
 
   return TRUE;
@@ -296,6 +313,9 @@ gst_mpp_dec_stop (GstVideoDecoder * decoder)
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
   gst_mpp_dec_reset (decoder, FALSE, TRUE);
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+
+  g_cond_clear (&self->event_cond);
+  g_mutex_clear (&self->event_mutex);
 
   g_mutex_clear (&self->mutex);
 
@@ -1015,6 +1035,9 @@ out:
     gst_pad_pause_task (decoder->srcpad);
   }
 
+  /* Notify task status or pending frame changes */
+  GST_MPP_DEC_BROADCAST (decoder);
+
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
   return;
 info_change:
@@ -1050,6 +1073,32 @@ gst_mpp_dec_handle_frame (GstVideoDecoder * decoder, GstVideoCodecFrame * frame)
 
   if (G_UNLIKELY (self->flushing))
     goto flushing;
+
+  /* Avoid holding too many frames */
+  while (1) {
+    GList *frames;
+    gboolean busy = FALSE;
+
+    if (self->task_ret != GST_FLOW_OK)
+      break;
+
+    frames = gst_video_decoder_get_frames (decoder);
+    if (frames) {
+      busy = g_list_length (frames) >= 10;
+      if (busy)
+        GST_DEBUG_OBJECT (self, "too many frames");
+
+      g_list_free_full (frames, (GDestroyNotify) gst_video_codec_frame_unref);
+    }
+
+    if (!busy)
+      break;
+
+    /* Waiting for the decoding thread to catch up */
+    GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+    GST_MPP_DEC_WAIT (decoder);
+    GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+  }
 
   if (!self->allocator) {
     MppBufferGroup group;

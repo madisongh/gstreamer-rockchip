@@ -90,6 +90,9 @@ struct _GstMppDec
 
   GstVideoCodecFrame *last_frame;
 
+  GMutex event_mutex;
+  GCond event_cond;
+
   MppCodingType mpp_type;
   MppCtx mpp_ctx;
   MppApi *mpi;

@@ -1144,7 +1144,7 @@ gst_mpp_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
   /* HACK: store the converted input buffer in frame->output_buffer */
   frame->output_buffer = buffer;
 
-  /* Avoid holding too much frames */
+  /* Avoid holding too many frames */
   if (G_UNLIKELY (self->pending_frames >= self->max_pending)) {
     GST_VIDEO_ENCODER_STREAM_UNLOCK (encoder);
     GST_MPP_ENC_WAIT (encoder, self->pending_frames < self->max_pending
